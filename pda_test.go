@@ -1,6 +1,8 @@
 package pda
 
-import "testing"
+import (
+	"testing"
+)
 
 type testState struct {
 	name             string
@@ -37,6 +39,7 @@ func compare(t *testing.T, result []string, expected []string, message string) {
 	t.Helper()
 	if len(result) != len(expected) {
 		t.Error(message)
+		return
 	}
 	for i := 0; i < len(result); i++ {
 		if result[i] != expected[i] {
@@ -88,8 +91,8 @@ func TestPop(t *testing.T) {
 	exitStack := make([]string, 0)
 	pauseStack := make([]string, 0)
 
-	addStack := func(stack []string, message string) {
-		stack = append(stack, message)
+	addStack := func(stack *[]string, message string) {
+		*stack = append(*stack, message)
 	}
 
 	doNothing := func() {}
@@ -99,10 +102,10 @@ func TestPop(t *testing.T) {
 		onEnterCallback:  doNothing,
 		onResumeCallback: doNothing,
 		onExitCallback: func() {
-			addStack(exitStack, "A")
+			addStack(&exitStack, "A")
 		},
 		onPauseCallback: func() {
-			addStack(pauseStack, "A")
+			addStack(&pauseStack, "A")
 		},
 	}
 
@@ -111,10 +114,22 @@ func TestPop(t *testing.T) {
 		onEnterCallback:  doNothing,
 		onResumeCallback: doNothing,
 		onExitCallback: func() {
-			addStack(exitStack, "B")
+			addStack(&exitStack, "B")
 		},
 		onPauseCallback: func() {
-			addStack(pauseStack, "B")
+			addStack(&pauseStack, "B")
+		},
+	}
+
+	stateC := testState{
+		name:             "C",
+		onEnterCallback:  doNothing,
+		onResumeCallback: doNothing,
+		onExitCallback: func() {
+			addStack(&exitStack, "C")
+		},
+		onPauseCallback: func() {
+			addStack(&pauseStack, "C")
 		},
 	}
 
@@ -124,4 +139,36 @@ func TestPop(t *testing.T) {
 	p.PushState(stateA)
 	p.PushState(stateB)
 
+	compare(t, exitStack, []string{}, "exit stack should have nothing")
+	compare(t, pauseStack, []string{"A"}, "pause stack should have A")
+
+	p.PushState(stateC)
+
+	compare(t, exitStack, []string{}, "exit stack should have nothing")
+	compare(t, pauseStack, []string{"A", "B"}, "pause stack should have A and B")
+
+	popped, err := p.PopState()
+
+	assert(t, err == nil, "error should not have been thrown")
+	assert(t, popped.(testState).name == stateC.name, "popped should be state C")
+	compare(t, exitStack, []string{"C"}, "exit stack should have C")
+	compare(t, pauseStack, []string{"A", "B"}, "pause stack should have A and B")
+
+	popped, err = p.PopState()
+
+	assert(t, err == nil, "error should not have been thrown")
+	assert(t, popped.(testState).name == stateB.name, "popped should be state B")
+	compare(t, exitStack, []string{"C", "B"}, "exit stack should have C and B")
+	compare(t, pauseStack, []string{"A", "B"}, "pause stack should have A and B")
+
+	popped, err = p.PopState()
+
+	assert(t, err == nil, "error should not have been thrown")
+	assert(t, popped.(testState).name == stateA.name, "popped should be state A")
+	compare(t, exitStack, []string{"C", "B", "A"}, "exit stack should have C, B, and A")
+	compare(t, pauseStack, []string{"A", "B"}, "pause stack should have A and B")
+
+	popped, err = p.PopState()
+	assert(t, err != nil, "error should have been thrown when popping empty pda")
+	assert(t, popped == nil, "no state should have been returned")
 }
